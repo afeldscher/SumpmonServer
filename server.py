@@ -48,10 +48,10 @@ class SumpMon:
         self.load_cache()
 
     def load_cache(self):
-        json_str = self.json_writer.read()
-        objs = json.loads(json_str)
-        self.history_cache = [LevelHistoryEntryMsg(h['level'], h['datetime']) for h in objs]
-
+        if os.path.exists(datafile):
+            json_str = self.json_writer.read()
+            objs = json.loads(json_str)
+            self.history_cache = [LevelHistoryEntryMsg(h['level'], h['datetime']) for h in objs]
 
     def get_last_level(self):
         self.lock.acquire()
