@@ -28,7 +28,7 @@ class JsonWriter:
         f = open(datafile_tmp, "w")
         f.write(json)
         f.close()
-        os.rename(datafile_tmp, datafile)
+        os.replace(datafile_tmp, datafile)
 
     def read(self):
         #open and read the file after the appending:
