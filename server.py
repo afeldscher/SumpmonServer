@@ -9,10 +9,10 @@ import os
 
 
 hostName = "0.0.0.0"
-serverPort = 8080
+serverPort = 8088
 datafile = "datafile.json"
 datafile_tmp = "datafile.json.tmp"
-
+shutdown_flag = False
 
 class LevelMsg:
     def __init__(self, _level):
@@ -76,9 +76,10 @@ class SumpMon:
 
 
     def run(self):
-        while(1):
+        while(not shutdown_flag):
             self.do_read()
             time.sleep(6)
+        print("Write thread stopped")
 
 
 
@@ -133,4 +134,5 @@ if __name__ == "__main__":
         pass
 
     webServer.server_close()
+    shutdown_flag = True
     print("Server stopped.")
