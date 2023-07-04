@@ -68,7 +68,10 @@ class SumpMon:
 
     def do_read(self):
         self.lock.acquire()
-        self.level+=1
+        self.level+=50
+        if (self.level > 1000):
+            self.level = 0
+        
         self.history_cache.append(LevelHistoryEntryMsg(self.level, datetime.datetime.now()))
         self.lock.release()
         json = self.get_all_history_json()
