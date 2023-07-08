@@ -40,10 +40,8 @@ function transform_levels(historical_data) {
     return sorted_historical_data;
 }
 
-function create_pages_by_day(historical_data) {
-    console.log(historical_data);
+function create_level_by_day(historical_data) {
     let dataSource = transform_levels(historical_data);
-    console.log(dataSource);
 
     const chart = $('#level-plot').dxChart({
         palette: 'ocean',
@@ -75,10 +73,10 @@ function create_pages_by_day(historical_data) {
         },
         argumentAxis: {
             label: {
-                format: 'month'
+                format: 'monthAndDay' // month
             },
             allowDecimals: false,
-            tickInterval: 'day',
+            tickInterval: 'day', // month
         },
         title: 'Level Over Time',
     }).dxChart('instance');
@@ -86,6 +84,48 @@ function create_pages_by_day(historical_data) {
 }
 
 
+
+function create_runs_by_day(historical_data) {
+    let dataSource = transform_levels(historical_data);
+
+    const chart = $('#runs-plot').dxChart({
+        palette: 'ocean',
+        dataSource,
+        commonSeriesSettings: {
+            type: 'bar',
+            argumentField: 'date',
+        },
+        commonAxisSettings: {
+            grid: {
+            visible: true,
+            },
+        },
+        margin: {
+            bottom: 20,
+        },
+        series: [
+            { valueField: 'runs', name: 'Runs' },
+        ],
+        tooltip: {
+            enabled: true,
+        },
+        legend: {
+            verticalAlignment: 'top',
+            horizontalAlignment: 'right',
+        },
+        export: {
+            enabled: true,
+        },
+        argumentAxis: {
+            label: {
+                format: 'monthAndDay' // month
+            },
+            allowDecimals: false,
+            tickInterval: 'day', // month
+        },
+        title: 'Runs By Day',
+    }).dxChart('instance');
+}
 
 
 function create_live_gauge() {
@@ -127,7 +167,17 @@ function history_plots() {
         crossDomain: true,
         dataType: "json",
         success: function( historical_data ) {
-            create_pages_by_day(historical_data);
+            create_level_by_day(historical_data);
+        }
+    });
+
+    $.ajax( {
+        url: API_BASE_URL + "/runs_history", 
+        type: "GET",
+        crossDomain: true,
+        dataType: "json",
+        success: function( historical_data ) {
+            create_runs_by_day(historical_data);
         }
     });
 }

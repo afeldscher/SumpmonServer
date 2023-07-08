@@ -6,6 +6,7 @@ from functools import partial
 import threading
 import datetime
 import os
+from datetime import datetime
 
 
 hostName = "0.0.0.0"
@@ -21,6 +22,11 @@ class LevelMsg:
 class LevelHistoryEntryMsg:
     def __init__(self, _level, _date):
         self.level = _level
+        self.datetime = _date
+
+class RunsHistoryEntryMsg:
+    def __init__(self, _runs, _date):
+        self.runs = _runs
         self.datetime = _date
 
 class JsonWriter:
@@ -65,6 +71,31 @@ class SumpMon:
         hist_json = json.dumps(hist_dict, default=str)
         self.lock.release()
         return hist_json
+    
+    def get_num_runs_history_json(self):
+        self.lock.acquire()
+        runs_by_date = {}
+        prev_val = 0
+        # assuming entries are in order
+        for entry in self.history_cache:
+            if entry.level < prev_val:
+                # print("Detected sump run", entry.__dict__, prev_val, entry.datetime)
+                if isinstance(entry.datetime, str):
+                    datetime_object = datetime.strptime(entry.datetime, '%Y-%m-%d %H:%M:%S.%f')
+                else:
+                    datetime_object = entry.datetime
+                date_str = datetime_object.date()
+                runs_by_date[date_str] = runs_by_date[date_str] + 1 if date_str in runs_by_date else 1
+            prev_val = entry.level
+
+        runs_hist_list = []
+        for key in runs_by_date:
+            runs_hist_list.append(RunsHistoryEntryMsg(runs_by_date[key], key))
+            
+        runs_hist_dict = [h.__dict__ for h in runs_hist_list]
+        runs_hist_json = json.dumps(runs_hist_dict, default=str)
+        self.lock.release()
+        return runs_hist_json
 
     def do_read(self):
         self.lock.acquire()
@@ -72,7 +103,7 @@ class SumpMon:
         if (self.level > 1000):
             self.level = 0
         
-        self.history_cache.append(LevelHistoryEntryMsg(self.level, datetime.datetime.now()))
+        self.history_cache.append(LevelHistoryEntryMsg(self.level, datetime.now()))
         self.lock.release()
         json = self.get_all_history_json()
         self.json_writer.write(json)
@@ -101,6 +132,8 @@ class MyServer(BaseHTTPRequestHandler):
             return self.level_request()
         elif self.path == "/history":
             return self.history_request()
+        elif self.path == "/runs_history":
+            return self.runs_history_request()
         else:
             self.send_response(404)
             self.send_header("Content-type", "text/html")
@@ -121,6 +154,12 @@ class MyServer(BaseHTTPRequestHandler):
         hist = self.sump_mon.get_all_history_json()
         self.wfile.write(bytes(hist, "utf-8"))
 
+    def runs_history_request(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/json")
+        self.end_headers()
+        hist = self.sump_mon.get_num_runs_history_json()
+        self.wfile.write(bytes(hist, "utf-8"))
 
 
 if __name__ == "__main__":        
