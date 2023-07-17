@@ -207,6 +207,41 @@ function create_live_gauge() {
 }
 
 
+
+function create_range_selector()
+{
+    const cur_date = new Date();
+    const prev_30_date = new Date();
+    prev_30_date.setDate(cur_date.getDate() - 30);
+    $(() => {
+        $('#date-range-selector').dxRangeSelector({
+          margin: {
+            // top: 50,
+          },
+          scale: {
+            startValue: new Date(2023, 1, 1),
+            endValue: cur_date,
+            minorTickInterval: 'day',
+            tickInterval: 'week',
+            minRange: 'day',
+            maxRange: 'year',
+            minorTick: {
+              visible: false,
+            },
+          },
+          sliderMarker: {
+            format: 'monthAndDay',
+          },
+          onValueChanged: (e) => {
+            console.log(e.value);
+          },
+          value: [prev_30_date, cur_date],
+          title: 'Select a Data Range',
+        });
+      });
+}
+
+
 function history_plots() {
 
     $.ajax( {
@@ -248,6 +283,7 @@ function update_gauge(gauge, data) {
 
 
 let live_gauge;
+let range_selector;
 
 
 function update_live_data()
@@ -275,6 +311,7 @@ function update_live_data()
  */ 
  $(document).ready(function() {
     live_gauge = create_live_gauge();
+    range_selector = create_range_selector()
 
     history_plots();
     update_live_data();
