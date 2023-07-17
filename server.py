@@ -7,8 +7,12 @@ import threading
 import datetime
 import os
 from datetime import datetime
+from math import pi
+from math import pow
 
-
+CC_PER_GAL = 3785.41
+SUMP_DIAMETER_CM = 30
+RUN_DROP_AMOUNT = 10
 hostName = "0.0.0.0"
 serverPort = 8088
 datafile = "datafile.json"
@@ -22,6 +26,11 @@ class LevelMsg:
 class LevelHistoryEntryMsg:
     def __init__(self, _level, _date):
         self.level = _level
+        self.datetime = _date
+
+class FlowRateHistoryEntryMsg:
+    def __init__(self, _flow_rate, _date):
+        self.flow_rate = _flow_rate
         self.datetime = _date
 
 class RunsHistoryEntryMsg:
@@ -65,6 +74,11 @@ class SumpMon:
         self.lock.release()
         return ret
 
+    def level_to_gallons(self, level_cm):
+        ccs = pi * pow(SUMP_DIAMETER_CM / 2, 2) * level_cm # pi * r^2 * h
+        gallons = ccs / CC_PER_GAL
+        return gallons
+
     def get_all_history_json(self):
         self.lock.acquire()
         hist_dict = [h.__dict__ for h in self.history_cache]
@@ -78,7 +92,7 @@ class SumpMon:
         prev_val = 0
         # assuming entries are in order
         for entry in self.history_cache:
-            if entry.level < prev_val:
+            if (entry.level + RUN_DROP_AMOUNT) < prev_val:
                 # print("Detected sump run", entry.__dict__, prev_val, entry.datetime)
                 if isinstance(entry.datetime, str):
                     datetime_object = datetime.strptime(entry.datetime, '%Y-%m-%d %H:%M:%S.%f')
@@ -97,10 +111,45 @@ class SumpMon:
         self.lock.release()
         return runs_hist_json
 
+
+    def get_flow_rate_history_json(self):
+        self.lock.acquire()
+        flow_rates_hist_list = []
+        prev_val = -1
+        prev_date = datetime.now()
+        # assuming entries are in order
+        for entry in self.history_cache:
+            datetime_object = None
+            if isinstance(entry.datetime, str):
+                datetime_object = datetime.strptime(entry.datetime, '%Y-%m-%d %H:%M:%S.%f')
+            else:
+                datetime_object = entry.datetime
+            
+            if prev_val == -1:
+                # Store first prevs and skip
+                prev_val = entry.level
+                prev_date = datetime_object
+                continue
+
+            level_delta = entry.level - prev_val
+            gallons_delta = self.level_to_gallons(level_delta)
+            mins_delta = (datetime_object - prev_date).total_seconds() / 60.0
+            flow_rate = gallons_delta / mins_delta
+            flow_rates_hist_list.append(FlowRateHistoryEntryMsg(flow_rate, entry.datetime).__dict__)
+
+            # Store Prevs
+            prev_val = entry.level
+            prev_date = datetime_object
+
+        flow_rates_hist_json = json.dumps(flow_rates_hist_list, default=str)
+        self.lock.release()
+        return flow_rates_hist_json
+
+
     def do_read(self):
         self.lock.acquire()
-        self.level+=50
-        if (self.level > 1000):
+        self.level+=5
+        if (self.level > 100):
             self.level = 0
         
         self.history_cache.append(LevelHistoryEntryMsg(self.level, datetime.now()))
@@ -121,7 +170,7 @@ class SumpMon:
 
 
 class MyServer(BaseHTTPRequestHandler):
-    def __init__(self, sump_mon, *args, **kwargs):
+    def __init__(self, sump_mon: SumpMon, *args, **kwargs):
         self.sump_mon = sump_mon
         # BaseHTTPRequestHandler calls do_GET **inside** __init__ !!!
         # So we have to call super().__init__ after setting attributes.
@@ -134,6 +183,8 @@ class MyServer(BaseHTTPRequestHandler):
             return self.history_request()
         elif self.path == "/runs_history":
             return self.runs_history_request()
+        elif self.path == "/flow_history":
+            return self.flow_history_request()
         else:
             self.send_response(404)
             self.send_header("Content-type", "text/html")
@@ -161,6 +212,12 @@ class MyServer(BaseHTTPRequestHandler):
         hist = self.sump_mon.get_num_runs_history_json()
         self.wfile.write(bytes(hist, "utf-8"))
 
+    def flow_history_request(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/json")
+        self.end_headers()
+        hist = self.sump_mon.get_flow_rate_history_json()
+        self.wfile.write(bytes(hist, "utf-8"))
 
 if __name__ == "__main__":        
     sump_mon = SumpMon()

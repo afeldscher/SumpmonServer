@@ -128,22 +128,70 @@ function create_runs_by_day(historical_data) {
 }
 
 
+
+function create_flow_rate_plot(historical_data) {
+    let dataSource = transform_levels(historical_data);
+
+    const chart = $('#flow-rate-plot').dxChart({
+        palette: 'ocean',
+        dataSource,
+        commonSeriesSettings: {
+            type: 'spline',
+            argumentField: 'date',
+        },
+        commonAxisSettings: {
+            grid: {
+            visible: true,
+            },
+        },
+        margin: {
+            bottom: 20,
+        },
+        series: [
+            { valueField: 'flow_rate', name: 'Gallons per Minute' },
+        ],
+        tooltip: {
+            enabled: true,
+        },
+        legend: {
+            verticalAlignment: 'top',
+            horizontalAlignment: 'right',
+        },
+        export: {
+            enabled: true,
+        },
+        argumentAxis: {
+            label: {
+                format: 'monthAndDay' // month
+            },
+            allowDecimals: false,
+            tickInterval: 'day', // month
+        },
+        title: 'Flow Rate Over Time',
+    }).dxChart('instance');
+
+}
+
+
 function create_live_gauge() {
     let gauge = $('#live-level-guage').dxCircularGauge({
           scale: {
             startValue: 0,
-            endValue: 1000,
-            tickInterval: 10,
+            endValue: 100,
+            tickInterval: 1,
             label: {
               useRangeColors: true,
+              customizeText(arg) {
+                return `${arg.valueText} cm`;
+              },
             },
           },
           rangeContainer: {
             palette: 'pastel',
             ranges: [
-              { startValue: 0, endValue: 400 },
-              { startValue: 400, endValue: 700 },
-              { startValue: 700, endValue: 1000 },
+              { startValue: 0, endValue: 60 },
+              { startValue: 60, endValue: 80 },
+              { startValue: 80, endValue: 100 },
             ],
           },
           title: {
@@ -178,6 +226,16 @@ function history_plots() {
         dataType: "json",
         success: function( historical_data ) {
             create_runs_by_day(historical_data);
+        }
+    });
+
+    $.ajax( {
+        url: API_BASE_URL + "/flow_history", 
+        type: "GET",
+        crossDomain: true,
+        dataType: "json",
+        success: function( historical_data ) {
+            create_flow_rate_plot(historical_data);
         }
     });
 }
