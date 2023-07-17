@@ -283,7 +283,6 @@ function update_gauge(gauge, data) {
 
 
 let live_gauge;
-let range_selector;
 
 
 function update_live_data()
@@ -311,7 +310,7 @@ function update_live_data()
  */ 
  $(document).ready(function() {
     live_gauge = create_live_gauge();
-    range_selector = create_range_selector()
+    create_range_selector()
 
     history_plots();
     update_live_data();
