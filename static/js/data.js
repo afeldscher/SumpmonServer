@@ -177,7 +177,7 @@ function create_live_gauge() {
     let gauge = $('#live-level-guage').dxCircularGauge({
           scale: {
             startValue: 0,
-            endValue: 100,
+            endValue: 50,
             tickInterval: 1,
             label: {
               useRangeColors: true,
@@ -189,9 +189,9 @@ function create_live_gauge() {
           rangeContainer: {
             palette: 'pastel',
             ranges: [
-              { startValue: 0, endValue: 60 },
-              { startValue: 60, endValue: 80 },
-              { startValue: 80, endValue: 100 },
+              { startValue: 0, endValue: 20 },
+              { startValue: 20, endValue: 30 },
+              { startValue: 30, endValue: 50 },
             ],
           },
           title: {
