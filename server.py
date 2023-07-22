@@ -10,9 +10,17 @@ from datetime import datetime
 from math import pi
 from math import pow
 
+ACTUAL_READINGS = True
+
+if ACTUAL_READINGS:
+    import board
+    import adafruit_vl53l4cd
+
+
 CC_PER_GAL = 3785.41
-SUMP_DIAMETER_CM = 30
-RUN_DROP_AMOUNT = 10
+SUMP_DIAMETER_CM = 38
+SUMP_DEPTH_CM = 48
+RUN_DROP_AMOUNT = 5
 hostName = "0.0.0.0"
 serverPort = 8088
 datafile = "datafile.json"
@@ -61,6 +69,20 @@ class SumpMon:
         self.json_writer = JsonWriter()
         self.history_cache = []
         self.load_cache()
+
+        if ACTUAL_READINGS:
+            self.vl53 = adafruit_vl53l4cd.VL53L4CD(board.I2C())
+            self.vl53.inter_measurement = 0
+            self.vl53.timing_budget = 200
+            print("VL53L4CD Init")
+            print("--------------------")
+            model_id, module_type = self.vl53.model_info
+            print("Model ID: 0x{:0X}".format(model_id))
+            print("Module Type: 0x{:0X}".format(module_type))
+            print("Timing Budget: {}".format(self.vl53.timing_budget))
+            print("Inter-Measurement: {}".format(self.vl53.inter_measurement))
+            print("--------------------")
+            self.vl53.start_ranging()
 
     def load_cache(self):
         if os.path.exists(datafile):
@@ -145,17 +167,35 @@ class SumpMon:
         self.lock.release()
         return flow_rates_hist_json
 
+    def sensor_val_to_level(sensor_val):
+        return SUMP_DEPTH_CM - sensor_val
+
 
     def do_read(self):
+        sensor_val = 0
+        if ACTUAL_READINGS:
+            # Clear interrupt and wait for a new value to come in
+            print("Trying to get new val")
+            self.vl53.clear_interrupt()
+            while not self.vl53.data_ready:
+                time.sleep(0.05) # 50ms
+            sensor_val = self.vl53.distance
+            print("Got new value ", sensor_val)
+
         self.lock.acquire()
-        self.level+=5
-        if (self.level > 100):
-            self.level = 0
-        
+        if not ACTUAL_READINGS:
+            self.level+=5
+            if (self.level > SUMP_DEPTH_CM):
+                self.level = 0
+        else:
+            self.level = self.sensor_val_to_level(sensor_val)
+            return
+
+
         self.history_cache.append(LevelHistoryEntryMsg(self.level, datetime.now()))
         self.lock.release()
         json = self.get_all_history_json()
-        self.json_writer.write(json)
+        self.json_writer.write(json) # TODO don't write every one
 
 
     def run(self):
