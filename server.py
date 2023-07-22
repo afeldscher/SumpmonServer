@@ -16,8 +16,10 @@ if ACTUAL_READINGS:
     import board
     import adafruit_vl53l4cd
 
-SAMPLE_PERIOD_SEC = 30
+SAMPLE_PERIOD_SEC = 15
 WRITE_X_SAMPLES = 60
+FLOW_RATE_SAMPLE_DISTANCE = 4
+READ_SAMPLE_COUNT = 4
 CC_PER_GAL = 3785.41
 SUMP_DIAMETER_CM = 38
 SUMP_DEPTH_CM = 48
@@ -141,6 +143,7 @@ class SumpMon:
         flow_rates_hist_list = []
         prev_val = -1
         prev_date = datetime.now()
+        sample_distance = 0
         # assuming entries are in order
         for entry in self.history_cache:
             datetime_object = None
@@ -154,6 +157,14 @@ class SumpMon:
                 prev_val = entry.level
                 prev_date = datetime_object
                 continue
+
+            if sample_distance < FLOW_RATE_SAMPLE_DISTANCE:
+                # Skip this sample to reduce noise
+                sample_distance += 1
+                continue
+            else:
+                sample_distance = 0
+                # proceed to add flow point
 
             level_delta = entry.level - prev_val
             gallons_delta = self.level_to_gallons(level_delta)
@@ -175,13 +186,18 @@ class SumpMon:
 
 
     def do_read(self):
-        sensor_val = 0
+        sensor_val = 0.0
         if ACTUAL_READINGS:
-            # Clear interrupt and wait for a new value to come in
-            self.vl53.clear_interrupt()
-            while not self.vl53.data_ready:
-                time.sleep(0.05) # 50ms
-            sensor_val = self.vl53.distance
+            # print("Starting sample collect")
+            for i in range(READ_SAMPLE_COUNT):
+                # Clear interrupt and wait for a new value to come in
+                self.vl53.clear_interrupt()
+                while not self.vl53.data_ready:
+                    time.sleep(0.05) # 50ms
+                sample_val = self.vl53.distance
+                sensor_val += sample_val
+                # print("Got ", i, sample_val)
+            sensor_val /= READ_SAMPLE_COUNT
 
         self.lock.acquire()
         if not ACTUAL_READINGS:
