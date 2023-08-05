@@ -68,6 +68,7 @@ class JsonWriter:
 class SumpMon:
     def __init__(self):
         self.level = 0
+        self.prev_level = 0
         self.lock = threading.Lock()
         self.json_writer = JsonWriter()
         self.history_cache = []
@@ -207,7 +208,10 @@ class SumpMon:
         else:
             self.level = self.sensor_val_to_level(sensor_val)
 
-        self.history_cache.append(LevelHistoryEntryMsg(self.level, datetime.now()))
+        if (abs(self.level - self.prev_level) > 1):
+            self.history_cache.append(LevelHistoryEntryMsg(self.level, datetime.now()))
+            self.prev_level = self.level
+
         self.lock.release()
         self.write_counter += 1
         if (self.write_counter % WRITE_X_SAMPLES) == 0:
