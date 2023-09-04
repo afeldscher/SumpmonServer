@@ -9,26 +9,20 @@ import os
 from datetime import datetime
 from math import pi
 from math import pow
+import sqlalchemy as db
 
-ACTUAL_READINGS = True
-
-if ACTUAL_READINGS:
-    import board
-    import adafruit_vl53l4cd
-
-SAMPLE_PERIOD_SEC = 1
-WRITE_X_SAMPLES = 1800
 FLOW_RATE_SAMPLE_DISTANCE = 4
-READ_SAMPLE_COUNT = 4
 CC_PER_GAL = 3785.41
 SUMP_DIAMETER_CM = 38
 SUMP_DEPTH_CM = 48
 RUN_DROP_AMOUNT = 4
 hostName = "0.0.0.0"
-serverPort = 8088
-datafile = "datafile.json"
-datafile_tmp = "datafile.json.tmp"
-shutdown_flag = False
+serverPort = 5901
+DB_USER = os.getenv('MYSQL_USER')
+DB_PASSWORD = os.environ.get('MYSQL_PASSWORD')
+MYSQL_DATABASE = os.environ.get('MYSQL_DATABASE')
+DB_HOST = f"mysql://{DB_USER}:{DB_PASSWORD}@127.0.0.1:3306/{MYSQL_DATABASE}"
+
 
 class LevelMsg:
     def __init__(self, _level):
@@ -64,30 +58,38 @@ class JsonWriter:
         return json
 
 
+class DBAdapter:
+    def __init__(self):
+        print(f"Using DB Host: {DB_HOST}")
+        self.engine = db.create_engine(DB_HOST)
+        self.connection = self.engine.connect()
+        self.metadata = db.MetaData()
+        self.level_table = db.Table('Levels', self.metadata,
+              db.Column('id', db.Integer(), primary_key=True, autoincrement=True),
+              db.Column('level', db.Double(), nullable=False),
+              db.Column('date', db.DateTime(), nullable=False),
+            )
+
+        self.metadata.create_all(self.engine) #Creates the table
+    
+    def add_val(self, in_level):
+        query = db.insert(self.level_table).values(level=in_level, date=datetime.now())
+        ResultProxy = self.connection.execute(query)
+        print("DB Result: ", ResultProxy)
+        self.connection.commit()
+
 
 class SumpMon:
-    def __init__(self):
+    def __init__(self, db_adapter: DBAdapter):
         self.level = 0
         self.prev_level = 0
         self.lock = threading.Lock()
         self.json_writer = JsonWriter()
         self.history_cache = []
-        self.load_cache()
+        # self.load_cache()
         self.write_counter = 0
+        self.db_adapter = db_adapter
 
-        if ACTUAL_READINGS:
-            self.vl53 = adafruit_vl53l4cd.VL53L4CD(board.I2C())
-            self.vl53.inter_measurement = 0
-            self.vl53.timing_budget = 200
-            print("VL53L4CD Init")
-            print("--------------------")
-            model_id, module_type = self.vl53.model_info
-            print("Model ID: 0x{:0X}".format(model_id))
-            print("Module Type: 0x{:0X}".format(module_type))
-            print("Timing Budget: {}".format(self.vl53.timing_budget))
-            print("Inter-Measurement: {}".format(self.vl53.inter_measurement))
-            print("--------------------")
-            self.vl53.start_ranging()
 
     def load_cache(self):
         if os.path.exists(datafile):
@@ -188,47 +190,11 @@ class SumpMon:
     def sensor_val_to_level(self, sensor_val):
         return SUMP_DEPTH_CM - sensor_val
 
-
-    def do_read(self):
-        sensor_val = 0.0
-        if ACTUAL_READINGS:
-            # print("Starting sample collect")
-            for i in range(READ_SAMPLE_COUNT):
-                # Clear interrupt and wait for a new value to come in
-                self.vl53.clear_interrupt()
-                while not self.vl53.data_ready:
-                    time.sleep(0.05) # 50ms
-                sample_val = self.vl53.distance
-                sensor_val += sample_val
-                # print("Got ", i, sample_val)
-            sensor_val /= READ_SAMPLE_COUNT
-
+    def update_level(self, level):
         self.lock.acquire()
-        if not ACTUAL_READINGS:
-            self.level+=5
-            if (self.level > SUMP_DEPTH_CM):
-                self.level = 0
-        else:
-            self.level = self.sensor_val_to_level(sensor_val)
-
-        if (abs(self.level - self.prev_level) > 1):
-            self.history_cache.append(LevelHistoryEntryMsg(self.level, datetime.now()))
-            self.prev_level = self.level
-
+        self.level = level
+        db_adapter.add_val(level)
         self.lock.release()
-        self.write_counter += 1
-        if (self.write_counter % WRITE_X_SAMPLES) == 0:
-            json = self.get_all_history_json()
-            self.json_writer.write(json)
-
-
-    def run(self):
-        while(not shutdown_flag):
-            self.do_read()
-            time.sleep(SAMPLE_PERIOD_SEC)
-        print("Write thread stopped")
-
-
 
 
 
@@ -242,7 +208,7 @@ class MyServer(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/level":
-            return self.level_request()
+            return self.level_get_request()
         elif self.path == "/history":
             return self.history_request()
         elif self.path == "/runs_history":
@@ -255,7 +221,33 @@ class MyServer(BaseHTTPRequestHandler):
             self.end_headers()
 
 
-    def level_request(self):
+    def do_POST(self):
+        if self.path == "/level":
+            return self.level_post_req()
+        else:
+            self.send_response(404)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+
+
+    def level_post_req(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        level_obj = json.loads(post_data)
+        if 'level' in level_obj:
+            posted_level = level_obj['level']
+            print("Posted level: ", posted_level)
+            self.sump_mon.update_level(posted_level)
+            self.send_response(200)
+            self.send_header("Content-type", "text/json")
+            self.end_headers()
+        else:
+            print("Invalid request, level not found")
+            self.send_response(400)
+            self.send_header("Content-type", "text/json")
+            self.end_headers()
+
+    def level_get_request(self):
         self.send_response(200)
         self.send_header("Content-type", "text/json")
         self.end_headers()
@@ -284,10 +276,8 @@ class MyServer(BaseHTTPRequestHandler):
         self.wfile.write(bytes(hist, "utf-8"))
 
 if __name__ == "__main__":        
-    sump_mon = SumpMon()
-    x = threading.Thread(target=sump_mon.run, args=())
-    x.start()
-
+    db_adapter = DBAdapter()
+    sump_mon = SumpMon(db_adapter)
     handler = partial(MyServer, sump_mon)
     webServer = HTTPServer((hostName, serverPort), handler)
     print("Server started http://%s:%s" % (hostName, serverPort))
@@ -297,5 +287,4 @@ if __name__ == "__main__":
         pass
 
     webServer.server_close()
-    shutdown_flag = True
     print("Server stopped.")
