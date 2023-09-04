@@ -16,14 +16,14 @@ if ACTUAL_READINGS:
     import board
     import adafruit_vl53l4cd
 
-SAMPLE_PERIOD_SEC = 15
-WRITE_X_SAMPLES = 60
+SAMPLE_PERIOD_SEC = 1
+WRITE_X_SAMPLES = 1800
 FLOW_RATE_SAMPLE_DISTANCE = 4
 READ_SAMPLE_COUNT = 4
 CC_PER_GAL = 3785.41
 SUMP_DIAMETER_CM = 38
 SUMP_DEPTH_CM = 48
-RUN_DROP_AMOUNT = 5
+RUN_DROP_AMOUNT = 4
 hostName = "0.0.0.0"
 serverPort = 8088
 datafile = "datafile.json"
@@ -116,10 +116,10 @@ class SumpMon:
     def get_num_runs_history_json(self):
         self.lock.acquire()
         runs_by_date = {}
-        prev_val = 0
+        prev_max_val = 0
         # assuming entries are in order
         for entry in self.history_cache:
-            if (entry.level + RUN_DROP_AMOUNT) < prev_val:
+            if (entry.level + RUN_DROP_AMOUNT) < prev_max_val:
                 # print("Detected sump run", entry.__dict__, prev_val, entry.datetime)
                 if isinstance(entry.datetime, str):
                     datetime_object = datetime.strptime(entry.datetime, '%Y-%m-%d %H:%M:%S.%f')
@@ -127,7 +127,10 @@ class SumpMon:
                     datetime_object = entry.datetime
                 date_str = datetime_object.date()
                 runs_by_date[date_str] = runs_by_date[date_str] + 1 if date_str in runs_by_date else 1
-            prev_val = entry.level
+                prev_max_val = 0
+            # update prev
+            if (entry.level > prev_max_val):
+                prev_max_val = entry.level
 
         runs_hist_list = []
         for key in runs_by_date:
