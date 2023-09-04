@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   db:
+    container_name: sumpmon-db
     image: mysql:8.0
     command: --default-authentication-plugin=mysql_native_password
     restart: always
@@ -12,6 +13,6 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_HOST: '%'
     ports:
-      - "3306:3306"
+      - "3308:3306"
     volumes:
       - ./db-data:/var/lib/mysql

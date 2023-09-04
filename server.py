@@ -21,7 +21,7 @@ serverPort = 5901
 DB_USER = os.getenv('MYSQL_USER')
 DB_PASSWORD = os.environ.get('MYSQL_PASSWORD')
 MYSQL_DATABASE = os.environ.get('MYSQL_DATABASE')
-DB_HOST = f"mysql://{DB_USER}:{DB_PASSWORD}@127.0.0.1:3306/{MYSQL_DATABASE}"
+DB_HOST = f"mysql://{DB_USER}:{DB_PASSWORD}@127.0.0.1:3308/{MYSQL_DATABASE}"
 
 
 class LevelMsg:
