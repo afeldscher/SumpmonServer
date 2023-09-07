@@ -60,7 +60,7 @@ class JsonWriter:
 
 class DBAdapter:
     def __init__(self):
-        print(f"Using DB Host: {DB_HOST}")
+        # print(f"Using DB Host: {DB_HOST}")
         self.engine = db.create_engine(DB_HOST)
         self.connection = self.engine.connect()
         self.metadata = db.MetaData()
@@ -77,6 +77,24 @@ class DBAdapter:
         ResultProxy = self.connection.execute(query)
         print("DB Result: ", ResultProxy)
         self.connection.commit()
+    
+    def get_history(self, start_date=None, end_date=None):
+        history_list = []
+        query = db.select(self.level_table.columns.level, self.level_table.columns.date)
+        if start_date is not None:
+            query = query.where(self.level_table.columns.date >= start_date)
+        if end_date is not None:
+            query = query.where(self.level_table.columns.date <= end_date)
+        query = query.order_by(db.asc(self.level_table.columns.date))
+        print("Query: ", query)
+        ResultProxy = self.connection.execute(query)
+        ResultSet = ResultProxy.fetchall()
+        for row in ResultSet:
+            hist_msg = LevelHistoryEntryMsg(row.level, row.date.isoformat())
+            history_list.append(hist_msg.__dict__)
+            
+        return history_list
+
 
 
 class SumpMon:
@@ -84,18 +102,9 @@ class SumpMon:
         self.level = 0
         self.prev_level = 0
         self.lock = threading.Lock()
-        self.json_writer = JsonWriter()
         self.history_cache = []
-        # self.load_cache()
         self.write_counter = 0
         self.db_adapter = db_adapter
-
-
-    def load_cache(self):
-        if os.path.exists(datafile):
-            json_str = self.json_writer.read()
-            objs = json.loads(json_str)
-            self.history_cache = [LevelHistoryEntryMsg(h['level'], h['datetime']) for h in objs]
 
     def get_last_level(self):
         self.lock.acquire()
@@ -110,7 +119,8 @@ class SumpMon:
 
     def get_all_history_json(self):
         self.lock.acquire()
-        hist_dict = [h.__dict__ for h in self.history_cache]
+        # hist_dict = [h.__dict__ for h in self.history_cache]
+        hist_dict = self.db_adapter.get_history() # TODO Dates
         hist_json = json.dumps(hist_dict, default=str)
         self.lock.release()
         return hist_json
