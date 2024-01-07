@@ -10,6 +10,9 @@ from datetime import datetime
 from math import pi
 from math import pow
 import sqlalchemy as db
+import urllib.parse as urlparse
+from collections import defaultdict
+
 
 FLOW_RATE_SAMPLE_DISTANCE = 4
 CC_PER_GAL = 3785.41
@@ -100,10 +103,7 @@ class DBAdapter:
 class SumpMon:
     def __init__(self, db_adapter: DBAdapter):
         self.level = 0
-        self.prev_level = 0
         self.lock = threading.Lock()
-        self.history_cache = []
-        self.write_counter = 0
         self.db_adapter = db_adapter
 
     def get_last_level(self):
@@ -117,20 +117,20 @@ class SumpMon:
         gallons = ccs / CC_PER_GAL
         return gallons
 
-    def get_all_history_json(self):
+    def get_all_history_json(self, start_date=None, end_date=None):
         self.lock.acquire()
-        # hist_dict = [h.__dict__ for h in self.history_cache]
-        hist_dict = self.db_adapter.get_history() # TODO Dates
-        hist_json = json.dumps(hist_dict, default=str)
+        level_listory = self.db_adapter.get_history(start_date, end_date)
+        hist_json = json.dumps(level_listory, default=str)
         self.lock.release()
         return hist_json
     
-    def get_num_runs_history_json(self):
+    def get_num_runs_history_json(self, start_date=None, end_date=None):
         self.lock.acquire()
         runs_by_date = {}
         prev_max_val = 0
-        # assuming entries are in order
-        for entry in self.history_cache:
+        level_history = self.db_adapter.get_history(start_date, end_date)
+
+        for entry in level_history:
             if (entry.level + RUN_DROP_AMOUNT) < prev_max_val:
                 # print("Detected sump run", entry.__dict__, prev_val, entry.datetime)
                 if isinstance(entry.datetime, str):
@@ -154,14 +154,16 @@ class SumpMon:
         return runs_hist_json
 
 
-    def get_flow_rate_history_json(self):
+    def get_flow_rate_history_json(self, start_date=None, end_date=None):
         self.lock.acquire()
         flow_rates_hist_list = []
         prev_val = -1
         prev_date = datetime.now()
         sample_distance = 0
+        level_history = self.db_adapter.get_history(start_date, end_date)
+
         # assuming entries are in order
-        for entry in self.history_cache:
+        for entry in level_history:
             datetime_object = None
             if isinstance(entry.datetime, str):
                 datetime_object = datetime.strptime(entry.datetime, '%Y-%m-%d %H:%M:%S.%f')
@@ -208,7 +210,6 @@ class SumpMon:
 
 
 
-
 class MyServer(BaseHTTPRequestHandler):
     def __init__(self, sump_mon: SumpMon, *args, **kwargs):
         self.sump_mon = sump_mon
@@ -217,14 +218,18 @@ class MyServer(BaseHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     def do_GET(self):
-        if self.path == "/level":
+        parsed_url = urlparse.urlparse(self.path)
+        query_params = urlparse.parse_qs(parsed_url.query)
+        query_params_safe = defaultdict(lambda : None, query_params)
+
+        if parsed_url.path == "/level":
             return self.level_get_request()
-        elif self.path == "/history":
-            return self.history_request()
-        elif self.path == "/runs_history":
-            return self.runs_history_request()
-        elif self.path == "/flow_history":
-            return self.flow_history_request()
+        elif parsed_url.path == "/history":
+            return self.history_request(query_params_safe['start_date'], query_params_safe['end_date'])
+        elif parsed_url.path == "/runs_history":
+            return self.runs_history_request(query_params_safe['start_date'], query_params_safe['end_date'])
+        elif parsed_url.path == "/flow_history":
+            return self.flow_history_request(query_params_safe['start_date'], query_params_safe['end_date'])
         else:
             self.send_response(404)
             self.send_header("Content-type", "text/html")
@@ -264,25 +269,25 @@ class MyServer(BaseHTTPRequestHandler):
         level_msg = LevelMsg(self.sump_mon.get_last_level())
         self.wfile.write(bytes(json.dumps(level_msg.__dict__), "utf-8"))
 
-    def history_request(self):
+    def history_request(self, start_date=None, end_date=None):
         self.send_response(200)
         self.send_header("Content-type", "text/json")
         self.end_headers()
-        hist = self.sump_mon.get_all_history_json()
+        hist = self.sump_mon.get_all_history_json(start_date, end_date)
         self.wfile.write(bytes(hist, "utf-8"))
 
-    def runs_history_request(self):
+    def runs_history_request(self, start_date=None, end_date=None):
         self.send_response(200)
         self.send_header("Content-type", "text/json")
         self.end_headers()
-        hist = self.sump_mon.get_num_runs_history_json()
+        hist = self.sump_mon.get_num_runs_history_json(start_date, end_date)
         self.wfile.write(bytes(hist, "utf-8"))
 
-    def flow_history_request(self):
+    def flow_history_request(self, start_date=None, end_date=None):
         self.send_response(200)
         self.send_header("Content-type", "text/json")
         self.end_headers()
-        hist = self.sump_mon.get_flow_rate_history_json()
+        hist = self.sump_mon.get_flow_rate_history_json(start_date, end_date)
         self.wfile.write(bytes(hist, "utf-8"))
 
 if __name__ == "__main__":        
