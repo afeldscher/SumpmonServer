@@ -5,6 +5,11 @@ const API_BASE_URL="https://feldscher.dev/sumpmon/api"
 // const API_BASE_URL=""
 
 
+const timescales = ['1 hour', '12 hours', '1 Day', '2 Days', '7 Days', 'Full', 'All'];
+let time_scale = timescales[0];
+let slider_end_date = new Date();
+let slider_start_date = new Date(slider_end_date.getDate() - 30);
+
 function toggleVisibility(item) {
     if (item.isVisible()) {
       item.hide();
@@ -208,18 +213,89 @@ function create_live_gauge() {
 
 
 
+function get_date_params() {
+    let start_date = slider_start_date;
+    let end_date = slider_end_date;
+    var ONE_HOUR = 60 * 60 * 1000; /* ms */
+
+    if (time_scale === timescales[0]) { // 1 hrs
+        start_date = new Date();
+        start_date.setTime(end_date.getTime() - (ONE_HOUR));
+        return {'start_date': start_date, 'end_date': end_date};
+    } else if (time_scale === timescales[1]) { // 12 hrs
+        start_date = new Date();
+        start_date.setTime(end_date.getTime() - (ONE_HOUR * 12));
+        return {'start_date': start_date, 'end_date': end_date};
+    } else if (time_scale === timescales[2]) { // 2 days 
+        start_date = new Date();
+        start_date.setDate(end_date.getDate() - 1);
+        return {'start_date': start_date, 'end_date': end_date};
+
+    } else if (time_scale === timescales[3]) { // 2 days 
+        start_date = new Date();
+        start_date.setDate(end_date.getDate() - 2);
+        return {'start_date': start_date, 'end_date': end_date};
+
+    } else if (time_scale === timescales[4]) { // 7 days
+        start_date = new Date();
+        start_date.setDate(end_date.getDate() - 7);
+        return {'start_date': start_date, 'end_date': end_date};
+
+    } else if (time_scale === timescales[5]) { // full
+        // no-op, leave dates as is
+        return {'start_date': start_date, 'end_date': end_date};
+
+    } else if (time_scale === timescales[6]) { // all
+        return {};
+    }
+
+    return {'start_date': start_date, 'end_date': end_date};
+}
+
+function convert_date_params(params) {
+    let output = {};
+    if (params['start_date']) {
+        output['start_date'] = params['start_date'].toISOString();
+    }
+    if (params['end_date']) {
+        output['end_date'] = params['end_date'].toISOString();
+    }
+
+    return output;
+}
+
 function create_range_selector()
 {
+
+    $("#history-reload-button").dxButton({
+        text: "Reload",
+        onClick: function() {
+            console.log("Reload history");
+            history_plots();
+        }
+    });
+
+    $('#radio-group-time-scale').dxRadioGroup({
+        items: timescales,
+        value: timescales[0],
+        layout: 'horizontal',
+        onValueChanged: (e) => {
+            console.log("Value Changed: ", e);
+            time_scale = e.value;
+        }
+      });
+
+
     const cur_date = new Date();
-    const prev_30_date = new Date();
-    prev_30_date.setDate(cur_date.getDate() - 30);
+    const start_date = new Date();
+    start_date.setDate(cur_date.getDate() - 7); // should be set based on radio
     $(() => {
         $('#date-range-selector').dxRangeSelector({
           margin: {
             // top: 50,
           },
           scale: {
-            startValue: new Date(2023, 1, 1),
+            startValue: new Date(2023, 12, 1),
             endValue: cur_date,
             minorTickInterval: 'day',
             tickInterval: 'week',
@@ -233,9 +309,11 @@ function create_range_selector()
             format: 'monthAndDay',
           },
           onValueChanged: (e) => {
-            console.log(e.value);
+            // console.log(e.value);
+            slider_start_date = e.value[0];
+            slider_end_date = e.value[1];
           },
-          value: [prev_30_date, cur_date],
+          value: [start_date, cur_date],
           title: 'Select a Data Range',
         });
       });
@@ -243,10 +321,12 @@ function create_range_selector()
 
 
 function history_plots() {
-
+    const date_params = convert_date_params( get_date_params() );
+    console.log("Date_Parms: ", date_params);
     $.ajax( {
         url: API_BASE_URL + "/history", 
         type: "GET",
+        data: date_params,
         crossDomain: true,
         dataType: "json",
         success: function( historical_data ) {
@@ -257,6 +337,7 @@ function history_plots() {
     $.ajax( {
         url: API_BASE_URL + "/runs_history", 
         type: "GET",
+        data: date_params,
         crossDomain: true,
         dataType: "json",
         success: function( historical_data ) {
@@ -267,6 +348,7 @@ function history_plots() {
     $.ajax( {
         url: API_BASE_URL + "/flow_history", 
         type: "GET",
+        data: date_params,
         crossDomain: true,
         dataType: "json",
         success: function( historical_data ) {
