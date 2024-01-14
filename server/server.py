@@ -20,7 +20,7 @@ SUMP_DIAMETER_CM = 38
 SUMP_DEPTH_CM = 48
 RUN_DROP_AMOUNT = 4
 hostName = "0.0.0.0"
-serverPort = 5901
+serverPort = 8088
 DB_USER = os.getenv('MYSQL_USER')
 DB_PASSWORD = os.environ.get('MYSQL_PASSWORD')
 MYSQL_DATABASE = os.environ.get('MYSQL_DATABASE')
@@ -77,8 +77,7 @@ class DBAdapter:
     
     def add_val(self, in_level):
         query = db.insert(self.level_table).values(level=in_level, date=datetime.now())
-        ResultProxy = self.connection.execute(query)
-        print("DB Result: ", ResultProxy)
+        self.connection.execute(query)
         self.connection.commit()
     
     def get_history(self, start_date=None, end_date=None):
@@ -89,7 +88,6 @@ class DBAdapter:
         if end_date is not None:
             query = query.where(self.level_table.columns.date <= end_date)
         query = query.order_by(db.asc(self.level_table.columns.date))
-        print("Query: ", query)
         ResultProxy = self.connection.execute(query)
         ResultSet = ResultProxy.fetchall()
         for row in ResultSet:
@@ -131,18 +129,18 @@ class SumpMon:
         level_history = self.db_adapter.get_history(start_date, end_date)
 
         for entry in level_history:
-            if (entry.level + RUN_DROP_AMOUNT) < prev_max_val:
+            if (entry['level'] + RUN_DROP_AMOUNT) < prev_max_val:
                 # print("Detected sump run", entry.__dict__, prev_val, entry.datetime)
-                if isinstance(entry.datetime, str):
-                    datetime_object = datetime.strptime(entry.datetime, '%Y-%m-%d %H:%M:%S.%f')
+                if isinstance(entry['datetime'], str):
+                    datetime_object = datetime.strptime(entry['datetime'], '%Y-%m-%dT%H:%M:%S')
                 else:
-                    datetime_object = entry.datetime
+                    datetime_object = entry['datetime']
                 date_str = datetime_object.date()
                 runs_by_date[date_str] = runs_by_date[date_str] + 1 if date_str in runs_by_date else 1
                 prev_max_val = 0
             # update prev
-            if (entry.level > prev_max_val):
-                prev_max_val = entry.level
+            if (entry['level'] > prev_max_val):
+                prev_max_val = entry['level']
 
         runs_hist_list = []
         for key in runs_by_date:
@@ -165,14 +163,14 @@ class SumpMon:
         # assuming entries are in order
         for entry in level_history:
             datetime_object = None
-            if isinstance(entry.datetime, str):
-                datetime_object = datetime.strptime(entry.datetime, '%Y-%m-%d %H:%M:%S.%f')
+            if isinstance(entry['datetime'], str):
+                datetime_object = datetime.strptime(entry['datetime'], '%Y-%m-%dT%H:%M:%S')
             else:
-                datetime_object = entry.datetime
+                datetime_object = entry['datetime']
             
             if prev_val == -1:
                 # Store first prevs and skip
-                prev_val = entry.level
+                prev_val = entry['level']
                 prev_date = datetime_object
                 continue
 
@@ -184,23 +182,20 @@ class SumpMon:
                 sample_distance = 0
                 # proceed to add flow point
 
-            level_delta = entry.level - prev_val
+            level_delta = entry['level'] - prev_val
             gallons_delta = self.level_to_gallons(level_delta)
             mins_delta = (datetime_object - prev_date).total_seconds() / 60.0
             flow_rate = gallons_delta / mins_delta
-            flow_rates_hist_list.append(FlowRateHistoryEntryMsg(flow_rate, entry.datetime).__dict__)
+            flow_rates_hist_list.append(FlowRateHistoryEntryMsg(flow_rate, entry['datetime']).__dict__)
 
             # Store Prevs
-            prev_val = entry.level
+            prev_val = entry['level']
             prev_date = datetime_object
 
         flow_rates_hist_json = json.dumps(flow_rates_hist_list, default=str)
         self.lock.release()
         return flow_rates_hist_json
 
-
-    def sensor_val_to_level(self, sensor_val):
-        return SUMP_DEPTH_CM - sensor_val
 
     def update_level(self, level):
         self.lock.acquire()

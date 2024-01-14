@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 from math import pi
 from math import pow
+import requests
 
 ACTUAL_READINGS = True
 
@@ -15,12 +16,13 @@ if ACTUAL_READINGS:
     import board
     import adafruit_vl53l4cd
 
-SAMPLE_PERIOD_SEC = 1
+SAMPLE_PERIOD_SEC = 2
 MIN_CHANGE_LEVEL = 1
 SUMP_DEPTH_CM = 48
+READ_SAMPLE_COUNT = 4
 
-serverHostName = "0.0.0.0"
-serverPort = 8088
+serverLevelApi = "https://feldscher.dev/sumpmon/api/level"
+serverPort = 443
 shutdown_flag = False
 
 class LevelMsg:
@@ -48,6 +50,11 @@ class SensorReader:
             print("--------------------")
             self.vl53.start_ranging()
 
+
+    def sensor_val_to_level(self, sensor_val):
+        return SUMP_DEPTH_CM - sensor_val
+
+
     def do_read(self):
         sensor_val = 0.0
         if ACTUAL_READINGS:
@@ -73,7 +80,12 @@ class SensorReader:
         if (abs(self.level - self.prev_level) > MIN_CHANGE_LEVEL):
             # self.history_cache.append(LevelHistoryEntryMsg(self.level, datetime.now()))
             print("Sending to server: ", self.level)
-            self.prev_level = self.level
+            level_obj = {'level': self.level}
+            x = requests.post(serverLevelApi, json = level_obj)
+            if x.status_code != 200:
+                print(f"Failed to send level to deamon, code {x.status_code}")
+            else:
+                self.prev_level = self.level
 
         self.lock.release()
 
