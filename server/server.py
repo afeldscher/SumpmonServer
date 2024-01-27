@@ -247,10 +247,16 @@ class MyServer(BaseHTTPRequestHandler):
         if 'level' in level_obj:
             posted_level = level_obj['level']
             print("Posted level: ", posted_level)
-            self.sump_mon.update_level(posted_level)
-            self.send_response(200)
-            self.send_header("Content-type", "text/json")
-            self.end_headers()
+            try:
+                self.sump_mon.update_level(posted_level)
+                self.send_response(200)
+                self.send_header("Content-type", "text/json")
+                self.end_headers()
+            except Exception as error:
+                print("An update level error was caught:", error)
+                self.send_response(500)
+                self.send_header("Content-type", "text/json")
+                self.end_headers()
         else:
             print("Invalid request, level not found")
             self.send_response(400)
@@ -265,25 +271,43 @@ class MyServer(BaseHTTPRequestHandler):
         self.wfile.write(bytes(json.dumps(level_msg.__dict__), "utf-8"))
 
     def history_request(self, start_date=None, end_date=None):
-        self.send_response(200)
-        self.send_header("Content-type", "text/json")
-        self.end_headers()
-        hist = self.sump_mon.get_all_history_json(start_date, end_date)
-        self.wfile.write(bytes(hist, "utf-8"))
+        try:
+            hist = self.sump_mon.get_all_history_json(start_date, end_date)
+            self.send_response(200)
+            self.send_header("Content-type", "text/json")
+            self.end_headers()
+            self.wfile.write(bytes(hist, "utf-8"))
+        except Exception as error:
+            print("A get all history error was caught:", error)
+            self.send_response(500)
+            self.send_header("Content-type", "text/json")
+            self.end_headers()
 
     def runs_history_request(self, start_date=None, end_date=None):
-        self.send_response(200)
-        self.send_header("Content-type", "text/json")
-        self.end_headers()
-        hist = self.sump_mon.get_num_runs_history_json(start_date, end_date)
-        self.wfile.write(bytes(hist, "utf-8"))
+        try:
+            hist = self.sump_mon.get_num_runs_history_json(start_date, end_date)
+            self.send_response(200)
+            self.send_header("Content-type", "text/json")
+            self.end_headers()
+            self.wfile.write(bytes(hist, "utf-8"))
+        except Exception as error:
+            print("A runs history error was caught:", error)
+            self.send_response(500)
+            self.send_header("Content-type", "text/json")
+            self.end_headers()
 
     def flow_history_request(self, start_date=None, end_date=None):
-        self.send_response(200)
-        self.send_header("Content-type", "text/json")
-        self.end_headers()
-        hist = self.sump_mon.get_flow_rate_history_json(start_date, end_date)
-        self.wfile.write(bytes(hist, "utf-8"))
+        try:
+            hist = self.sump_mon.get_flow_rate_history_json(start_date, end_date)
+            self.send_response(200)
+            self.send_header("Content-type", "text/json")
+            self.end_headers()
+            self.wfile.write(bytes(hist, "utf-8"))
+        except Exception as error:
+            print("A flow history error was caught:", error)
+            self.send_response(500)
+            self.send_header("Content-type", "text/json")
+            self.end_headers()
 
 if __name__ == "__main__":        
     db_adapter = DBAdapter()

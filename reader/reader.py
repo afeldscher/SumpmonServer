@@ -63,10 +63,12 @@ class SensorReader:
                 # Clear interrupt and wait for a new value to come in
                 self.vl53.clear_interrupt()
                 while not self.vl53.data_ready:
-                    time.sleep(0.05) # 50ms
+                    time.sleep(0.1) # 100ms
                 sample_val = self.vl53.distance
                 sensor_val += sample_val
                 # print("Got ", i, sample_val)
+                time.sleep(0.01) # 10ms
+
             sensor_val /= READ_SAMPLE_COUNT
 
         self.lock.acquire()
@@ -93,7 +95,10 @@ class SensorReader:
 if __name__ == "__main__":        
     sensor_reader = SensorReader()
     while(not shutdown_flag):
-        sensor_reader.do_read()
+        try:
+            sensor_reader.do_read()
+        except Exception as error:
+            print("A read error as caught:", error)
         time.sleep(SAMPLE_PERIOD_SEC)
 
     shutdown_flag = True
