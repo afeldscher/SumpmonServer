@@ -64,7 +64,7 @@ class JsonWriter:
 class DBAdapter:
     def __init__(self):
         # print(f"Using DB Host: {DB_HOST}")
-        self.engine = db.create_engine(DB_HOST)
+        self.engine = db.create_engine(DB_HOST, pool_pre_ping=True, pool_recycle=3600)
         self.connection = self.engine.connect()
         self.metadata = db.MetaData()
         self.level_table = db.Table('Levels', self.metadata,
